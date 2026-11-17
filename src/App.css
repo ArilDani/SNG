@@ -1,0 +1,14 @@
+/* SNG Agency Root Application Styling */
+.sng-app {
+  min-height: 100vh;
+  position: relative;
+  background-color: var(--ink);
+  color: #f7f6fb;
+  overflow-x: hidden;
+}
+
+main {
+  position: relative;
+  width: 100%;
+  min-height: calc(100vh - 78px);
+}
