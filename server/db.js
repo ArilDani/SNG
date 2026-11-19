@@ -13,7 +13,7 @@ const username = process.env.MONGODB_USERNAME || 'arildani60_db_user';
 const password = encodeURIComponent(process.env.MONGODB_PASSWORD || '8Ia7BxfSAWAS5Ewk');
 
 // Standard SRV URI as requested by user
-export const srvUri = `mongodb+srv://${username}:${password}@cluster0.ol7ptsz.mongodb.net/sng_agency?retryWrites=true&w=majority`;
+export const srvUri = process.env.MONGODB_URI || `mongodb+srv://${username}:${password}@cluster0.ol7ptsz.mongodb.net/sng_agency?retryWrites=true&w=majority`;
 
 // Direct replica-set URI (fallback in case Windows local DNS blocks SRV lookups)
 export const directUri = `mongodb://${username}:${password}@ac-0d2qyfy-shard-00-00.ol7ptsz.mongodb.net:27017,ac-0d2qyfy-shard-00-01.ol7ptsz.mongodb.net:27017,ac-0d2qyfy-shard-00-02.ol7ptsz.mongodb.net:27017/sng_agency?ssl=true&replicaSet=atlas-gmwkwk-shard-0&authSource=admin&retryWrites=true&w=majority`;

@@ -1152,11 +1152,13 @@ if (fs.existsSync(distPath)) {
   });
 }
 
-// Start server
-app.listen(PORT, async () => {
-  console.log(`SNG Agency Backend Server running on port ${PORT}`);
-  await initDatabase();
-});
+// Start server only when running standalone (not in Vercel serverless)
+if (!process.env.VERCEL) {
+  app.listen(PORT, async () => {
+    console.log(`SNG Agency Backend Server running on port ${PORT}`);
+    await initDatabase();
+  });
+}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
@@ -1170,3 +1172,6 @@ process.on('SIGTERM', async () => {
   await disconnectFromMongoDB();
   process.exit(0);
 });
+
+export { initDatabase };
+export default app;
