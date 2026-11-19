@@ -34,7 +34,7 @@ export default function ArticlesPage() {
                   </div>
                   <h3>{a.title}</h3>
                   <p>{a.excerpt}</p>
-                  <button onClick={() => navigateTo('article-detail', a.id)}>
+                  <button onClick={() => navigateTo('article-detail', a.id || a._id)}>
                     Baca artikel ↗
                   </button>
                 </div>

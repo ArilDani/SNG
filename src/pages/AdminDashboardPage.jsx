@@ -2,6 +2,30 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import * as api from '../api';
 import sngLogo from '../assets/sng-logo-clean.png';
+import BlogWriterStudio from '../components/BlogWriterStudio';
+import {
+  IconOverview,
+  IconUsers,
+  IconUser,
+  IconOrders,
+  IconServices,
+  IconArticles,
+  IconTeam,
+  IconMessages,
+  IconSettings,
+  IconExternal,
+  IconLogout,
+  IconTrash,
+  IconRefresh,
+  IconSearch,
+  IconCheck,
+  IconPlus,
+  IconEdit,
+  IconDatabase,
+  IconCrown,
+  IconShield,
+  IconGlobe
+} from '../components/Icons';
 
 const STATUS_OPTIONS = [
   'Menunggu Ditinjau',
@@ -18,23 +42,47 @@ export default function AdminDashboardPage() {
     user,
     logout,
     navigateTo,
-    setIsAuthModalOpen,
     services,
     refreshServices,
     articles,
     refreshArticles,
     settings,
     refreshSettings,
+    team,
+    refreshTeam,
     showToast
   } = useApp();
 
   const [activeTab, setActiveTab] = useState('overview');
   const [orders, setOrders] = useState([]);
   const [messages, setMessages] = useState([]);
+  const [usersList, setUsersList] = useState([]);
+  const [userSearch, setUserSearch] = useState('');
 
   // Modal states for CRUD operations
   const [orderDetailModal, setOrderDetailModal] = useState(null);
   const [adminNoteInput, setAdminNoteInput] = useState('');
+  const [dbHealth, setDbHealth] = useState(null);
+
+  useEffect(() => {
+    const checkDb = async () => {
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        setDbHealth(data);
+      } catch (e) {}
+    };
+    checkDb();
+    const interval = setInterval(checkDb, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Team CRUD modal state
+  const [teamModal, setTeamModal] = useState({
+    open: false,
+    isEdit: false,
+    data: { id: '', name: '', role: '', photo: '', skills: '', bio: '', portfolio: '' }
+  });
 
   // Service CRUD modal state
   const [serviceModal, setServiceModal] = useState({
@@ -60,12 +108,14 @@ export default function AdminDashboardPage() {
   // Load all data
   const loadAdminData = useCallback(async () => {
     try {
-      const [ordersRes, messagesRes] = await Promise.allSettled([
+      const [ordersRes, messagesRes, usersRes] = await Promise.allSettled([
         api.getOrders(),
-        api.getMessages()
+        api.getMessages(),
+        api.getUsers()
       ]);
       if (ordersRes.status === 'fulfilled') setOrders(ordersRes.value || []);
       if (messagesRes.status === 'fulfilled') setMessages(messagesRes.value || []);
+      if (usersRes.status === 'fulfilled') setUsersList(usersRes.value || []);
     } catch (err) {
       console.error('Error loading admin data:', err);
     }
@@ -75,7 +125,7 @@ export default function AdminDashboardPage() {
     loadAdminData();
   }, [loadAdminData]);
 
-  // If user is not admin, allow quick login as admin
+  // If user is not admin, show direct redirection prompt
   if (user?.role !== 'admin') {
     return (
       <div className="app-page active">
@@ -89,15 +139,16 @@ export default function AdminDashboardPage() {
           <div className="dash-main">
             <div className="dash-panel">
               <div className="empty-state">
-                <b>Akses Admin Console</b>
-                Silakan masuk sebagai admin untuk mengelola layanan, artikel, pesanan, dan pengaturan website secara realtime dengan MongoDB.
+                <b>Akses Terbatas: Administrator</b>
+                Silakan masuk dengan akun berwenang untuk mengelola sistem backend MongoDB Atlas.
                 <br />
                 <button
                   className="btn btn-dark"
                   style={{ marginTop: '20px' }}
-                  onClick={() => setIsAuthModalOpen(true)}
+                  onClick={() => navigateTo('login')}
                 >
-                  Masuk sebagai admin ↗
+                  <span>Masuk ke Akun Admin</span>
+                  <IconExternal size={12} style={{ marginLeft: '6px' }} />
                 </button>
               </div>
             </div>
@@ -170,25 +221,26 @@ export default function AdminDashboardPage() {
     setServiceModal({
       open: true,
       isEdit: true,
-      data: { ...svc }
+      data: { ...svc, id: svc.id || svc._id }
     });
   };
 
   const handleSaveService = async (e) => {
     e.preventDefault();
-    const { id, name, category, icon, desc, deliverables, label } = serviceModal.data;
+    const { id, _id, name, category, icon, desc, deliverables, label } = serviceModal.data;
+    const targetId = id || _id;
     if (!name || !desc) {
       showToast('Nama dan deskripsi layanan wajib diisi.');
       return;
     }
 
     try {
-      if (serviceModal.isEdit) {
-        await api.updateService(id, { name, category, icon, desc, deliverables, label });
-        showToast(`Layanan ${name} berhasil diperbarui di database!`);
+      if (serviceModal.isEdit && targetId) {
+        await api.updateService(targetId, { name, category, icon, desc, deliverables, label });
+        showToast(`Layanan "${name}" berhasil diperbarui di database!`);
       } else {
         await api.createService({ id, name, category, icon, desc, deliverables, label });
-        showToast(`Layanan baru ${name} berhasil ditambahkan ke database!`);
+        showToast(`Layanan baru "${name}" berhasil ditambahkan ke database!`);
       }
       await refreshServices();
       setServiceModal({ ...serviceModal, open: false });
@@ -209,7 +261,7 @@ export default function AdminDashboardPage() {
   };
 
   // -------------------------------------------------------------
-  // ARTICLES CRUD
+  // ARTICLES CRUD (BLOG STUDIO)
   // -------------------------------------------------------------
   const openAddArticleModal = () => {
     setArticleModal({
@@ -222,42 +274,52 @@ export default function AdminDashboardPage() {
         title: '',
         excerpt: '',
         read: '4 MIN READ',
-        body: ''
+        body: '',
+        coverImage: ''
       }
     });
   };
 
-  const openEditArticleModal = (article) => {
+  const openEditArticleModal = (art) => {
     setArticleModal({
       open: true,
       isEdit: true,
       data: {
-        ...article,
-        body: Array.isArray(article.body) ? article.body.join('\n\n') : article.body
+        ...art,
+        id: art.id || art._id,
+        body: Array.isArray(art.body) ? art.body.join('\n\n') : (art.body || '')
       }
     });
   };
 
-  const handleSaveArticle = async (e) => {
-    e.preventDefault();
-    const { id, category, date, title, excerpt, read, body } = articleModal.data;
-    if (!title || !excerpt) {
+  const handleSaveArticle = async (articleData) => {
+    const isEdit = articleModal.isEdit;
+    const targetId = articleData.id || articleModal.data?.id || articleModal.data?._id;
+
+    if (!articleData.title || !articleData.excerpt) {
       showToast('Judul dan ringkasan artikel wajib diisi.');
       return;
     }
 
-    const paragraphs = body ? body.split('\n\n').filter(Boolean) : [excerpt];
+    const bodyParagraphs = typeof articleData.body === 'string'
+      ? articleData.body.split('\n\n').filter((p) => p.trim().length > 0)
+      : Array.isArray(articleData.body) ? articleData.body : [];
+
+    const payload = {
+      ...articleData,
+      body: bodyParagraphs
+    };
 
     try {
-      if (articleModal.isEdit) {
-        await api.updateArticle(id, { category, date, title, excerpt, read, body: paragraphs });
-        showToast(`Artikel "${title}" berhasil diperbarui!`);
+      if (isEdit && targetId) {
+        await api.updateArticle(targetId, payload);
+        showToast(`Artikel "${articleData.title}" berhasil diperbarui!`);
       } else {
-        await api.createArticle({ id, category, date, title, excerpt, read, body: paragraphs });
-        showToast(`Artikel baru "${title}" berhasil ditambahkan ke database!`);
+        await api.createArticle(payload);
+        showToast(`Artikel baru "${articleData.title}" berhasil diterbitkan!`);
       }
       await refreshArticles();
-      setArticleModal({ ...articleModal, open: false });
+      setArticleModal({ open: false, isEdit: false, data: {} });
     } catch (err) {
       showToast('Gagal menyimpan artikel: ' + err.message);
     }
@@ -271,6 +333,117 @@ export default function AdminDashboardPage() {
       showToast(`Artikel "${articleTitle}" berhasil dihapus.`);
     } catch (err) {
       showToast('Gagal menghapus artikel: ' + err.message);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // TEAM CRUD & TOGGLE
+  // -------------------------------------------------------------
+  const openCreateTeamModal = () => {
+    setTeamModal({
+      open: true,
+      isEdit: false,
+      data: {
+        id: `TEAM-0${team.length + 1}`,
+        name: '',
+        role: '',
+        photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
+        skills: '',
+        bio: '',
+        portfolio: ''
+      }
+    });
+  };
+
+  const openEditTeamModal = (member) => {
+    setTeamModal({
+      open: true,
+      isEdit: true,
+      data: {
+        ...member,
+        id: member.id || member._id,
+        skills: Array.isArray(member.skills) ? member.skills.join(', ') : (member.skills || '')
+      }
+    });
+  };
+
+  const handleSaveTeamMember = async (e) => {
+    e.preventDefault();
+    const { id, _id, name, role, photo, skills, bio, portfolio } = teamModal.data;
+    const targetId = id || _id;
+    if (!name || !role) {
+      showToast('Nama dan posisi/role anggota tim wajib diisi.');
+      return;
+    }
+
+    const skillsArray = typeof skills === 'string'
+      ? skills.split(',').map((s) => s.trim()).filter(Boolean)
+      : Array.isArray(skills) ? skills : [];
+
+    try {
+      if (teamModal.isEdit && targetId) {
+        await api.updateTeamMember(targetId, { name, role, photo, skills: skillsArray, bio, portfolio });
+        showToast(`Data tim "${name}" berhasil diperbarui!`);
+      } else {
+        await api.createTeamMember({ id, name, role, photo, skills: skillsArray, bio, portfolio });
+        showToast(`Anggota tim baru "${name}" berhasil ditambahkan!`);
+      }
+      await refreshTeam();
+      setTeamModal({ ...teamModal, open: false });
+    } catch (err) {
+      showToast('Gagal menyimpan data tim: ' + err.message);
+    }
+  };
+
+  const handleDeleteTeamMember = async (memberId, memberName) => {
+    if (!window.confirm(`Hapus anggota tim "${memberName}" dari daftar?`)) return;
+    try {
+      await api.deleteTeamMember(memberId);
+      await refreshTeam();
+      showToast(`Anggota tim "${memberName}" berhasil dihapus.`);
+    } catch (err) {
+      showToast('Gagal menghapus anggota tim: ' + err.message);
+    }
+  };
+
+  const handleToggleTeamSection = async () => {
+    const newStatus = settings.isTeamSectionActive === false;
+    try {
+      await api.updateSettings({ ...settings, isTeamSectionActive: newStatus });
+      await refreshSettings();
+      showToast(newStatus ? 'Section Behind the SNG diaktifkan di website!' : 'Section Behind the SNG dinonaktifkan dari website.');
+    } catch (err) {
+      showToast('Gagal mengubah status section: ' + err.message);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // USERS & ROLE ACTIONS (MONGODB ATLAS)
+  // -------------------------------------------------------------
+  const handleRoleChange = async (userId, userName, newRole) => {
+    try {
+      await api.updateUserRole(userId, newRole);
+      setUsersList((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+      );
+      showToast(`Role pengguna "${userName}" diubah menjadi: ${newRole === 'admin' ? 'Administrator' : 'Klien'}`);
+    } catch (err) {
+      showToast('Gagal mengubah role pengguna: ' + err.message);
+    }
+  };
+
+  const handleDeleteUser = async (userId, userName, userEmail) => {
+    if (user?.email && userEmail?.toLowerCase() === user.email.toLowerCase()) {
+      showToast('Tidak dapat menghapus akun Anda sendiri yang sedang aktif.');
+      return;
+    }
+    if (!window.confirm(`Hapus pengguna "${userName}" (${userEmail}) dari database MongoDB?`)) return;
+    try {
+      await api.deleteUser(userId);
+      setUsersList((prev) => prev.filter((u) => u.id !== userId));
+      showToast(`Pengguna "${userName}" berhasil dihapus.`);
+    } catch (err) {
+      showToast('Gagal menghapus pengguna: ' + err.message);
     }
   };
 
@@ -305,119 +478,254 @@ export default function AdminDashboardPage() {
   return (
     <div className="app-page active">
       <div className="dashboard-shell">
+        {/* SIDEBAR NAVIGATION */}
         <aside className="dash-sidebar">
-          <div className="brand" onClick={() => navigateTo('home')} style={{ cursor: 'pointer', marginBottom: '20px' }}>
+          <div className="brand" onClick={() => navigateTo('home')}>
             <img src={sngLogo} alt="SNG Agency" className="brand-logo-img" />
             <span>SNG CONTROL<small>ADMIN CONSOLE</small></span>
           </div>
 
           <div className="dash-label">MANAGEMENT</div>
+
           <button
             className={activeTab === 'overview' ? 'active' : ''}
             onClick={() => setActiveTab('overview')}
           >
-            ◫ &nbsp; Overview
+            <IconOverview size={15} />
+            <span>Overview</span>
           </button>
+
+          <button
+            className={activeTab === 'users' ? 'active' : ''}
+            onClick={() => setActiveTab('users')}
+          >
+            <IconUsers size={15} />
+            <span>Pengguna & Role</span>
+            <span className="dash-count-badge">{usersList.length}</span>
+          </button>
+
           <button
             className={activeTab === 'orders' ? 'active' : ''}
             onClick={() => setActiveTab('orders')}
           >
-            ▤ &nbsp; Pesanan ({orders.length})
+            <IconOrders size={15} />
+            <span>Pesanan</span>
+            <span className="dash-count-badge">{orders.length}</span>
           </button>
+
           <button
             className={activeTab === 'services' ? 'active' : ''}
             onClick={() => setActiveTab('services')}
           >
-            ◇ &nbsp; Layanan CRUD ({services.length})
+            <IconServices size={15} />
+            <span>Layanan CRUD</span>
+            <span className="dash-count-badge">{services.length}</span>
           </button>
+
           <button
             className={activeTab === 'articles' ? 'active' : ''}
             onClick={() => setActiveTab('articles')}
           >
-            ✎ &nbsp; Artikel CRUD ({articles.length})
+            <IconArticles size={15} />
+            <span>Artikel CRUD</span>
+            <span className="dash-count-badge">{articles.length}</span>
           </button>
+
+          <button
+            className={activeTab === 'team' ? 'active' : ''}
+            onClick={() => setActiveTab('team')}
+          >
+            <IconTeam size={15} />
+            <span>Tim Behind SNG</span>
+            <span className="dash-count-badge">{team.length}</span>
+          </button>
+
           <button
             className={activeTab === 'messages' ? 'active' : ''}
             onClick={() => setActiveTab('messages')}
           >
-            ✉ &nbsp; Pesan Masuk ({messages.length})
+            <IconMessages size={15} />
+            <span>Pesan Masuk</span>
+            <span className="dash-count-badge">{messages.length}</span>
           </button>
+
           <button
             className={activeTab === 'settings' ? 'active' : ''}
             onClick={() => setActiveTab('settings')}
           >
-            ⚙ &nbsp; Hero & Situs
+            <IconSettings size={15} />
+            <span>Hero & Situs</span>
           </button>
 
           <div className="dash-label">SYSTEM</div>
+
           <button onClick={() => navigateTo('home')}>
-            ↗ &nbsp; Website SNG
+            <IconGlobe size={15} />
+            <span>Website SNG</span>
+            <IconExternal size={11} style={{ marginLeft: 'auto', opacity: 0.6 }} />
           </button>
-          <button onClick={logout}>
-            ⇥ &nbsp; Keluar
+
+          <button onClick={logout} className="dash-btn-logout">
+            <IconLogout size={15} />
+            <span>Keluar</span>
           </button>
         </aside>
 
+        {/* MAIN DASHBOARD CONTENT AREA */}
         <div className="dash-main">
+          {/* Top Bar with Dribbble-style Breadcrumb, Title & User Card */}
           <div className="dash-top">
-            <div>
-              <h1>
-                {activeTab === 'orders'
-                  ? 'Kelola Pesanan'
+            <div className="dash-top-title-group">
+              <div className="dash-breadcrumb">
+                <span className="dash-breadcrumb-root">SNG CONTROL</span>
+                <span className="dash-breadcrumb-separator">/</span>
+                <span className="dash-breadcrumb-active">
+                  {activeTab === 'users'
+                    ? 'PENGGUNA & ROLE'
+                    : activeTab === 'orders'
+                    ? 'PESANAN LAYANAN'
+                    : activeTab === 'services'
+                    ? 'KATALOG LAYANAN'
+                    : activeTab === 'articles'
+                    ? 'ARTIKEL & INSIGHT'
+                    : activeTab === 'team'
+                    ? 'BEHIND THE SNG'
+                    : activeTab === 'messages'
+                    ? 'PESAN MASUK'
+                    : activeTab === 'settings'
+                    ? 'PENGATURAN SITUS'
+                    : 'OVERVIEW'}
+                </span>
+              </div>
+              <h1 className="dash-main-title">
+                {activeTab === 'users'
+                  ? 'Kelola Pengguna & Hak Akses'
+                  : activeTab === 'orders'
+                  ? 'Daftar Pesanan Masuk'
                   : activeTab === 'services'
-                  ? 'Kelola Layanan (CRUD)'
+                  ? 'Manajemen Katalog Layanan'
                   : activeTab === 'articles'
-                  ? 'Kelola Artikel & Insight (CRUD)'
+                  ? 'Manajemen Artikel & Insight'
+                  : activeTab === 'team'
+                  ? 'Tim Behind the SNG'
                   : activeTab === 'messages'
-                  ? 'Pesan Masuk (Contact)'
+                  ? 'Pesan Kontak Klien'
                   : activeTab === 'settings'
-                  ? 'Pengaturan Hero & Website'
-                  : 'Overview'}
+                  ? 'Pengaturan Hero & Brand'
+                  : 'Dashboard Overview'}
               </h1>
-              <p>Kelola data secara langsung dengan MongoDB Atlas. Perubahan langsung aktif di frontend.</p>
+              <p className="dash-main-desc">
+                Sistem manajemen konten dan transaksi real-time dengan sinkronisasi MongoDB Atlas.
+              </p>
             </div>
-            <span className="tag">ADMIN CONSOLE / MONGODB ATLAS</span>
+
+            <div className="dash-top-actions">
+              <div className="dash-live-status-pill">
+                <span className={`live-pulse-dot ${dbHealth?.isAtlas ? 'connected' : 'connecting'}`}></span>
+                <IconDatabase size={13} />
+                <span>{dbHealth?.isAtlas ? 'ATLAS CONNECTED' : 'CONNECTING ATLAS'}</span>
+              </div>
+
+              <div className="dash-user-profile-card">
+                <div className="user-avatar-initials">
+                  {(user?.name || 'A').charAt(0).toUpperCase()}
+                </div>
+                <div className="user-profile-info">
+                  <strong className="user-profile-name">{user?.name || 'Administrator'}</strong>
+                  <span className="user-profile-role-tag">
+                    <IconCrown size={10} />
+                    <span>ADMINISTRATOR</span>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* TAB: OVERVIEW */}
+          {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <>
               <div className="metric-grid">
-                <div className="metric">
-                  <small>Total Pesanan</small>
+                <div className="metric" onClick={() => setActiveTab('users')} style={{ cursor: 'pointer' }}>
+                  <div className="metric-header-row">
+                    <small>Pengguna Terdaftar</small>
+                    <div className="metric-icon-box">
+                      <IconUsers size={16} />
+                    </div>
+                  </div>
+                  <strong>{usersList.length}</strong>
+                  <span>{usersList.filter(u => u.role === 'admin').length} Admin · {usersList.filter(u => u.role !== 'admin').length} Klien</span>
+                </div>
+
+                <div className="metric" onClick={() => setActiveTab('orders')} style={{ cursor: 'pointer' }}>
+                  <div className="metric-header-row">
+                    <small>Total Pesanan</small>
+                    <div className="metric-icon-box">
+                      <IconOrders size={16} />
+                    </div>
+                  </div>
                   <strong>{orders.length}</strong>
-                  <span>Semua permintaan</span>
+                  <span>Semua brief masuk</span>
                 </div>
-                <div className="metric">
-                  <small>Menunggu Review</small>
-                  <strong>{orders.filter((o) => o.status === 'Menunggu Ditinjau').length}</strong>
-                  <span>Perlu ditindaklanjuti</span>
+
+                <div className="metric" onClick={() => setActiveTab('orders')} style={{ cursor: 'pointer' }}>
+                  <div className="metric-header-row">
+                    <small>Menunggu Ditinjau</small>
+                    <div className="metric-icon-box pending-box">
+                      <IconShield size={16} />
+                    </div>
+                  </div>
+                  <strong style={{ color: '#ffb347' }}>
+                    {orders.filter((o) => o.status === 'Menunggu Ditinjau').length}
+                  </strong>
+                  <span>Perlu tindak lanjut</span>
                 </div>
-                <div className="metric">
-                  <small>Layanan Aktif</small>
+
+                <div className="metric" onClick={() => setActiveTab('services')} style={{ cursor: 'pointer' }}>
+                  <div className="metric-header-row">
+                    <small>Layanan Aktif</small>
+                    <div className="metric-icon-box">
+                      <IconServices size={16} />
+                    </div>
+                  </div>
                   <strong>{services.length}</strong>
-                  <span>Katalog SNG</span>
-                </div>
-                <div className="metric">
-                  <small>Pesan Masuk</small>
-                  <strong>{messages.length}</strong>
-                  <span>Formulir Contact</span>
+                  <span>Katalog terpublikasi</span>
                 </div>
               </div>
 
-              <div className="notice">
-                Semua data tersimpan secara persisten di MongoDB Atlas via driver resmi Node.js (`MongoClient`). Setiap pembaruan status atau konten akan langsung terubah di frontend tanpa reload.
+              {/* Database Live Banner */}
+              <div className="dash-atlas-card">
+                <div className="atlas-card-info">
+                  <div className="atlas-status-headline">
+                    <span className={`live-pulse-dot ${dbHealth?.isAtlas ? 'connected' : 'connecting'}`}></span>
+                    <strong>
+                      {dbHealth?.isAtlas ? 'MongoDB Atlas Cloud Database: Online & Terhubung' : 'MongoDB Atlas: Menghubungkan ke Cluster0...'}
+                    </strong>
+                  </div>
+                  <p className="atlas-uri-info">
+                    Cluster: <strong>cluster0.ol7ptsz.mongodb.net</strong> · Database: <strong>sng_agency</strong> · User: <strong>arildani60_db_user</strong>
+                  </p>
+                </div>
+                <div className="atlas-stats-pills">
+                  <span className="atlas-badge-pill">
+                    <IconDatabase size={11} />
+                    <span>8 KOLEKSI AKTIF</span>
+                  </span>
+                </div>
               </div>
 
+              {/* Recent Orders Table Panel */}
               <div className="dash-panel">
                 <div className="panel-head">
-                  <h3>Permintaan Layanan Terbaru</h3>
+                  <div>
+                    <h3>Permintaan Layanan Terbaru</h3>
+                    <span>5 PESANAN TERAKHIR</span>
+                  </div>
                   <button
-                    className="text-link"
-                    style={{ background: 'none', border: 0, color: '#6845a7' }}
+                    className="dash-link-action"
                     onClick={() => setActiveTab('orders')}
                   >
-                    Semua pesanan ↗
+                    <span>Lihat Semua Pesanan</span>
+                    <IconExternal size={12} />
                   </button>
                 </div>
 
@@ -439,17 +747,17 @@ export default function AdminDashboardPage() {
                             <td>
                               <strong>{o.id}</strong>
                               <br />
-                              {new Date(o.createdAt).toLocaleDateString('id-ID')}
+                              <small>{new Date(o.createdAt).toLocaleDateString('id-ID')}</small>
                             </td>
                             <td>
-                              {o.customer?.name}
+                              <strong>{o.customer?.name}</strong>
                               <br />
                               <small>{o.customer?.email}</small>
                             </td>
                             <td>
-                              {o.serviceName}
+                              <strong>{o.serviceName}</strong>
                               <br />
-                              <small>{o.customer?.business}</small>
+                              <small>{o.customer?.business || '-'}</small>
                             </td>
                             <td>
                               <select
@@ -466,14 +774,14 @@ export default function AdminDashboardPage() {
                             </td>
                             <td>
                               <button
-                                className="text-link"
-                                style={{ color: '#6945a4', border: 0, background: 'none' }}
+                                className="dash-table-btn"
                                 onClick={() => {
                                   setOrderDetailModal(o);
                                   setAdminNoteInput(o.adminNote || '');
                                 }}
                               >
-                                Detail & Catatan
+                                <IconEdit size={12} />
+                                <span>Detail</span>
                               </button>
                             </td>
                           </tr>
@@ -484,22 +792,235 @@ export default function AdminDashboardPage() {
                 ) : (
                   <div className="empty-state">
                     <b>Belum ada pesanan masuk</b>
-                    Pesanan yang dikirim melalui katalog layanan akan muncul di sini secara otomatis.
+                    Pesanan baru dari formulir katalog akan otomatis tercatat di sini.
                   </div>
                 )}
               </div>
             </>
           )}
 
-          {/* TAB: ORDERS */}
+          {/* TAB 2: USERS & ROLE MANAGEMENT */}
+          {activeTab === 'users' && (
+            <div className="dash-panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Kelola Pengguna & Hak Akses Role ({usersList.length})</h3>
+                  <span>KONTROL AKSES DATABASE</span>
+                </div>
+                <button
+                  type="button"
+                  className="dash-btn-secondary"
+                  onClick={async () => {
+                    try {
+                      const res = await api.getUsers();
+                      setUsersList(res);
+                      showToast('Daftar pengguna diperbarui dari MongoDB Atlas.');
+                    } catch (e) {
+                      showToast('Gagal memuat: ' + e.message);
+                    }
+                  }}
+                >
+                  <IconRefresh size={13} />
+                  <span>Muat Ulang</span>
+                </button>
+              </div>
+
+              {/* User metrics */}
+              <div className="metric-grid" style={{ marginBottom: '20px' }}>
+                <div className="metric">
+                  <div className="metric-header-row">
+                    <small>Total Pengguna</small>
+                    <IconUsers size={16} />
+                  </div>
+                  <strong>{usersList.length}</strong>
+                  <span>Tersimpan di Atlas</span>
+                </div>
+
+                <div className="metric">
+                  <div className="metric-header-row">
+                    <small>Administrator</small>
+                    <IconCrown size={16} style={{ color: '#a776ff' }} />
+                  </div>
+                  <strong style={{ color: '#c49eff' }}>
+                    {usersList.filter(u => u.role === 'admin').length}
+                  </strong>
+                  <span>Akses Penuh Console</span>
+                </div>
+
+                <div className="metric">
+                  <div className="metric-header-row">
+                    <small>Klien / User</small>
+                    <IconUser size={16} style={{ color: '#68e29a' }} />
+                  </div>
+                  <strong style={{ color: '#68e29a' }}>
+                    {usersList.filter(u => u.role !== 'admin').length}
+                  </strong>
+                  <span>Akses Client Space</span>
+                </div>
+              </div>
+
+              <div className="dash-notice-box">
+                <IconShield size={16} className="notice-icon" />
+                <p>
+                  Ubah hak akses role pengguna secara langsung melalui dropdown pada tabel. Perubahan langsung tersimpan ke MongoDB Atlas. Pengguna yang diubah perannya menjadi Administrator akan langsung memperoleh hak akses ke Admin Console.
+                </p>
+              </div>
+
+              {/* Search bar */}
+              <div className="dash-search-row">
+                <div className="dash-search-wrap">
+                  <IconSearch size={14} className="search-svg" />
+                  <input
+                    type="text"
+                    placeholder="Cari pengguna berdasarkan nama, email, atau nomor HP..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                  />
+                </div>
+                {userSearch && (
+                  <button
+                    type="button"
+                    className="dash-btn-ghost"
+                    onClick={() => setUserSearch('')}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              {usersList.length > 0 ? (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Pengguna</th>
+                        <th>Email & Kontak</th>
+                        <th>Terdaftar Pada</th>
+                        <th>Status Role</th>
+                        <th>Ubah Role (Live Dropdown)</th>
+                        <th>Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usersList
+                        .filter(u => {
+                          if (!userSearch.trim()) return true;
+                          const q = userSearch.toLowerCase();
+                          return (
+                            (u.name && u.name.toLowerCase().includes(q)) ||
+                            (u.email && u.email.toLowerCase().includes(q)) ||
+                            (u.phone && u.phone.toLowerCase().includes(q)) ||
+                            (u.role && u.role.toLowerCase().includes(q))
+                          );
+                        })
+                        .map((u) => {
+                          const isCurrentUser = user?.email && u.email?.toLowerCase() === user.email.toLowerCase();
+                          const isAdmin = u.role === 'admin';
+                          return (
+                            <tr key={u.id || u.email}>
+                              <td>
+                                <div className="user-cell-row">
+                                  <div className={`user-table-avatar ${isAdmin ? 'admin-avatar' : 'client-avatar'}`}>
+                                    {(u.name || 'U').charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <strong style={{ color: '#ffffff', fontSize: '12px' }}>{u.name}</strong>
+                                      {isCurrentUser && (
+                                        <span className="self-tag">Anda</span>
+                                      )}
+                                    </div>
+                                    <small style={{ color: '#88849c', fontFamily: 'var(--mono)', fontSize: '9px' }}>
+                                      {u.id}
+                                    </small>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <span style={{ color: '#dedbf0', fontWeight: 500 }}>{u.email}</span>
+                                <br />
+                                <small style={{ color: '#7a7690' }}>{u.phone || 'Nomor HP -'}</small>
+                              </td>
+                              <td>
+                                <small style={{ color: '#9d98b2' }}>
+                                  {u.createdAt
+                                    ? new Date(u.createdAt).toLocaleDateString('id-ID', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: 'numeric'
+                                      })
+                                    : '-'}
+                                </small>
+                              </td>
+                              <td>
+                                <span className={`user-role-badge ${isAdmin ? 'badge-role-admin' : 'badge-role-user'}`}>
+                                  {isAdmin ? (
+                                    <>
+                                      <IconCrown size={11} />
+                                      <span>ADMINISTRATOR</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <IconUser size={11} />
+                                      <span>USER / KLIEN</span>
+                                    </>
+                                  )}
+                                </span>
+                              </td>
+                              <td>
+                                <select
+                                  className="table-select-role"
+                                  value={u.role}
+                                  onChange={(e) => handleRoleChange(u.id, u.name, e.target.value)}
+                                  disabled={isCurrentUser}
+                                  title={isCurrentUser ? 'Tidak dapat menurunkan role akun aktif Anda sendiri' : 'Ubah hak akses pengguna'}
+                                >
+                                  <option value="user">User / Klien (Client Space)</option>
+                                  <option value="admin">Administrator (Admin Console)</option>
+                                </select>
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="dash-table-del-btn"
+                                  disabled={isCurrentUser}
+                                  title={isCurrentUser ? 'Akun aktif tidak dapat dihapus' : 'Hapus pengguna dari database'}
+                                  onClick={() => handleDeleteUser(u.id, u.name, u.email)}
+                                >
+                                  <IconTrash size={12} />
+                                  <span>Hapus</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <b>Tidak ada pengguna ditemukan</b>
+                  Gunakan form pendaftaran untuk menambahkan akun baru.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: ORDERS */}
           {activeTab === 'orders' && (
             <div className="dash-panel">
               <div className="panel-head">
-                <h3>Semua Permintaan Layanan ({orders.length})</h3>
-                <span>DATABASE LIVE SYNC</span>
+                <div>
+                  <h3>Semua Permintaan Layanan ({orders.length})</h3>
+                  <span>DATABASE LIVE SYNC</span>
+                </div>
               </div>
-              <div className="notice">
-                Pilih status pada dropdown untuk memperbarui status pesanan di database. Klien yang membuka Client Space dengan email terkait akan melihat status dan catatan ini secara real-time.
+
+              <div className="dash-notice-box">
+                <IconShield size={16} className="notice-icon" />
+                <p>
+                  Perubahan status pada dropdown langsung tersimpan ke MongoDB Atlas. Klien yang membuka Client Space dengan email terkait akan melihat status dan catatan ini secara real-time.
+                </p>
               </div>
 
               {orders.length > 0 ? (
@@ -526,22 +1047,22 @@ export default function AdminDashboardPage() {
                           <td>
                             <strong>{o.customer?.name}</strong>
                             <br />
-                            {o.customer?.email}
+                            <small>{o.customer?.email}</small>
                             <br />
-                            <small>{o.customer?.phone || '-'}</small>
+                            <small style={{ color: '#777' }}>{o.customer?.phone || '-'}</small>
                           </td>
                           <td>
                             <strong>{o.serviceName}</strong>
                             <br />
-                            <small>Brand: {o.customer?.business || '-'}</small>
+                            <small>Bisnis: {o.customer?.business || '-'}</small>
                             <br />
                             <small>Tipe: {o.projectType}</small>
                           </td>
                           <td style={{ maxWidth: '240px' }}>
-                            <small style={{ fontWeight: 'bold' }}>Budget: {o.budget}</small>
-                            <p style={{ margin: '4px 0 0', fontSize: '9px', color: '#555' }}>
-                              {o.brief.slice(0, 90)}
-                              {o.brief.length > 90 ? '…' : ''}
+                            <small style={{ color: '#be9eff', fontWeight: 600 }}>{o.budget}</small>
+                            <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#a29ebd', lineHeight: '1.5' }}>
+                              {o.brief.slice(0, 85)}
+                              {o.brief.length > 85 ? '…' : ''}
                             </p>
                           </td>
                           <td>
@@ -557,28 +1078,29 @@ export default function AdminDashboardPage() {
                               ))}
                             </select>
                             {o.adminNote && (
-                              <div style={{ marginTop: '5px', fontSize: '8px', color: '#6845a7' }}>
-                                ✓ Catatan terisi
+                              <div style={{ marginTop: '5px', fontSize: '9px', color: '#9d76f5', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <IconCheck size={10} />
+                                <span>Catatan terisi</span>
                               </div>
                             )}
                           </td>
                           <td>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
                               <button
-                                className="btn btn-dark btn-sm"
+                                className="dash-table-btn"
                                 onClick={() => {
                                   setOrderDetailModal(o);
                                   setAdminNoteInput(o.adminNote || '');
                                 }}
                               >
-                                Catatan
+                                <IconEdit size={12} />
+                                <span>Catatan</span>
                               </button>
                               <button
-                                className="text-link"
-                                style={{ color: '#900', border: 0, background: 'none', textAlign: 'left', fontSize: '9px' }}
+                                className="dash-table-del-btn"
                                 onClick={() => handleDeleteOrder(o.id)}
                               >
-                                Hapus
+                                <IconTrash size={12} />
                               </button>
                             </div>
                           </td>
@@ -590,44 +1112,56 @@ export default function AdminDashboardPage() {
               ) : (
                 <div className="empty-state">
                   <b>Belum ada permintaan masuk</b>
-                  Uji pemesanan dengan membuka halaman Layanan dan mengirim brief proyek.
+                  Uji pemesanan dengan membuka katalog layanan di website.
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB: SERVICES (FULL CRUD) */}
+          {/* TAB 4: SERVICES CRUD */}
           {activeTab === 'services' && (
             <div className="dash-panel">
               <div className="panel-head">
-                <h3>Daftar Layanan di Database ({services.length})</h3>
+                <div>
+                  <h3>Katalog Layanan SNG ({services.length})</h3>
+                  <span>KATALOG MARKETPLACE</span>
+                </div>
                 <button
-                  className="btn btn-dark btn-sm"
+                  className="dash-btn-primary"
                   onClick={openAddServiceModal}
                 >
-                  ＋ Tambah Layanan
+                  <IconPlus size={13} />
+                  <span>Tambah Layanan Baru</span>
                 </button>
               </div>
-              <div className="notice">
-                Layanan di bawah ini disajikan langsung di halaman depan (Home) dan halaman Layanan (Marketplace). Tambah, ubah, atau hapus layanan di sini dan lihat hasilnya langsung terubah di frontend!
+
+              <div className="dash-notice-box">
+                <IconShield size={16} className="notice-icon" />
+                <p>
+                  Layanan di bawah ini disajikan langsung di halaman Home dan halaman Layanan. Tambah, ubah, atau hapus layanan di sini dan hasilnya langsung sinkron di frontend.
+                </p>
               </div>
 
               <div className="dash-service-list">
                 {services.map((s) => (
-                  <div key={s.id || s._id} className="dash-service">
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '15px', color: '#7a4de2' }}>{s.icon || '✧'}</span>
-                        <b>{s.name}</b>
+                  <div key={s.id || s._id} className="dash-service-card">
+                    <div className="dash-service-content">
+                      <div className="dash-service-title-row">
+                        <span className="dash-service-icon-badge">{s.icon || '✧'}</span>
+                        <strong>{s.name}</strong>
                       </div>
-                      <small>Kategori: {s.category} · {s.label || s.category}</small>
-                      <p style={{ margin: '6px 0 0', fontSize: '9px', color: '#555', lineHeight: '1.5' }}>
-                        {s.desc.slice(0, 110)}...
-                      </p>
+                      <span className="dash-service-cat-tag">Kategori: {s.category} · {s.label || s.category}</span>
+                      <p className="dash-service-desc">{s.desc}</p>
                     </div>
-                    <div className="dash-actions">
-                      <button onClick={() => openEditServiceModal(s)}>Edit</button>
-                      <button className="del" onClick={() => handleDeleteService(s.id, s.name)}>Hapus</button>
+                    <div className="dash-card-btn-actions">
+                      <button className="dash-btn-secondary" onClick={() => openEditServiceModal(s)}>
+                        <IconEdit size={12} />
+                        <span>Edit</span>
+                      </button>
+                      <button className="dash-table-del-btn" onClick={() => handleDeleteService(s.id || s._id, s.name)}>
+                        <IconTrash size={12} />
+                        <span>Hapus</span>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -635,62 +1169,48 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
-          {/* TAB: ARTICLES (FULL CRUD) */}
+          {/* TAB 5: ARTICLES CRUD */}
           {activeTab === 'articles' && (
             <div className="dash-panel">
               <div className="panel-head">
-                <h3>Daftar Artikel & Insights ({articles.length})</h3>
+                <div>
+                  <h3>Daftar Artikel & Insights ({articles.length})</h3>
+                  <span>PUBLIKASI CMS</span>
+                </div>
                 <button
-                  className="btn btn-dark btn-sm"
+                  className="dash-btn-primary"
                   onClick={openAddArticleModal}
                 >
-                  ＋ Tambah Artikel
+                  <IconPlus size={13} />
+                  <span>Tulis Artikel Baru</span>
                 </button>
               </div>
-              <div className="notice">
-                Kelola artikel edukasi dan panduan strategi UMKM. Artikel ini langsung ditampilkan di halaman depan dan halaman Artikel.
+
+              <div className="dash-notice-box">
+                <IconShield size={16} className="notice-icon" />
+                <p>
+                  Kelola artikel edukasi strategi pemasaran digital. Artikel yang dipublikasikan di sini langsung tayang di halaman Artikel dan ringkasannya tampil di Home.
+                </p>
               </div>
 
               <div style={{ display: 'grid', gap: '12px' }}>
                 {articles.map((a) => (
-                  <div
-                    key={a.id || a._id}
-                    style={{
-                      padding: '16px',
-                      border: '1px solid rgba(20,20,30,.12)',
-                      borderRadius: '6px',
-                      background: 'rgba(255,255,255,.3)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      gap: '15px'
-                    }}
-                  >
+                  <div key={a.id || a._id} className="dash-article-row">
                     <div>
-                      <span className="eyebrow" style={{ color: '#7a4de2', fontSize: '8px' }}>
+                      <span className="dash-article-meta-tag">
                         {a.category} · {a.date} · {a.read}
                       </span>
-                      <h4 style={{ margin: '6px 0', fontSize: '14px', letterSpacing: '-0.03em' }}>
-                        {a.title}
-                      </h4>
-                      <p style={{ margin: 0, fontSize: '10px', color: '#555', lineHeight: '1.6' }}>
-                        {a.excerpt}
-                      </p>
+                      <h4 className="dash-article-title">{a.title}</h4>
+                      <p className="dash-article-excerpt">{a.excerpt}</p>
                     </div>
-                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                      <button
-                        className="btn btn-outline btn-sm"
-                        style={{ color: '#2b2c36', borderColor: 'rgba(20,20,30,.2)' }}
-                        onClick={() => openEditArticleModal(a)}
-                      >
-                        Edit
+                    <div className="dash-card-btn-actions">
+                      <button className="dash-btn-secondary" onClick={() => openEditArticleModal(a)}>
+                        <IconEdit size={12} />
+                        <span>Edit</span>
                       </button>
-                      <button
-                        className="btn btn-dark btn-sm"
-                        style={{ background: '#9e2d2d' }}
-                        onClick={() => handleDeleteArticle(a.id, a.title)}
-                      >
-                        Hapus
+                      <button className="dash-table-del-btn" onClick={() => handleDeleteArticle(a.id || a._id, a.title)}>
+                        <IconTrash size={12} />
+                        <span>Hapus</span>
                       </button>
                     </div>
                   </div>
@@ -699,152 +1219,253 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
-          {/* TAB: MESSAGES */}
+          {/* TAB 6: BEHIND THE SNG (TEAM) */}
+          {activeTab === 'team' && (
+            <div className="dash-panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Behind The SNG — Manajemen Tim ({team.length} Anggota)</h3>
+                  <span>TIM AGSI & EXPERT</span>
+                </div>
+                <button className="dash-btn-primary" onClick={openCreateTeamModal}>
+                  <IconPlus size={13} />
+                  <span>Tambah Anggota Tim</span>
+                </button>
+              </div>
+
+              {/* Master toggle card */}
+              <div className="dash-team-toggle-bar">
+                <div className="team-toggle-left">
+                  <div className="toggle-indicator-dot" style={{ background: settings.isTeamSectionActive !== false ? '#4ade80' : '#f87171' }}></div>
+                  <div>
+                    <strong>Status Section "Behind the SNG":</strong>
+                    <span className="toggle-status-text">
+                      {settings.isTeamSectionActive !== false ? 'AKTIF (Tampil di Home & About)' : 'NONAKTIF (Disembunyikan)'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={`dash-btn-secondary ${settings.isTeamSectionActive !== false ? 'btn-warn' : 'btn-accent'}`}
+                  onClick={handleToggleTeamSection}
+                >
+                  {settings.isTeamSectionActive !== false ? 'Nonaktifkan Section' : 'Aktifkan Section'}
+                </button>
+              </div>
+
+              <div className="dash-notice-box">
+                <IconShield size={16} className="notice-icon" />
+                <p>
+                  Kelola anggota tim Behind the SNG. Setiap perubahan foto, posisi, daftar keahlian, dan portofolio langsung sinkron di halaman Home dan About.
+                </p>
+              </div>
+
+              {team && team.length > 0 ? (
+                <div className="admin-team-grid">
+                  {team.map((member, idx) => (
+                    <div key={member.id || idx} className="admin-team-card">
+                      <div className="admin-team-card-top">
+                        <img
+                          src={member.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80'}
+                          alt={member.name}
+                          className="admin-team-avatar"
+                        />
+                        <div className="admin-team-meta">
+                          <h4>{member.name}</h4>
+                          <span className="admin-team-role">{member.role}</span>
+                          <small className="mono">ID: {member.id}</small>
+                        </div>
+                      </div>
+
+                      {member.bio && (
+                        <p className="admin-team-bio">{member.bio}</p>
+                      )}
+
+                      <div className="admin-team-section-box">
+                        <small className="mono">KEAHLIAN / SKILLS:</small>
+                        <div className="admin-team-skills">
+                          {(Array.isArray(member.skills) ? member.skills : (member.skills ? member.skills.split(',') : [])).map((s, sIdx) => (
+                            <span key={sIdx} className="admin-skill-badge">
+                              {s.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {member.portfolio && (
+                        <div className="admin-team-section-box">
+                          <small className="mono">PORTOFOLIO:</small>
+                          <p className="admin-team-portfolio-text">{member.portfolio}</p>
+                        </div>
+                      )}
+
+                      <div className="admin-card-actions">
+                        <button
+                          className="dash-btn-secondary"
+                          onClick={() => openEditTeamModal(member)}
+                        >
+                          <IconEdit size={12} />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          className="dash-table-del-btn"
+                          onClick={() => handleDeleteTeamMember(member.id || member._id, member.name)}
+                        >
+                          <IconTrash size={12} />
+                          <span>Hapus</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <b>Belum ada anggota tim terdaftar</b>
+                  Klik tombol "+ Tambah Anggota Tim" di atas untuk menambahkan anggota tim.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 7: MESSAGES */}
           {activeTab === 'messages' && (
             <div className="dash-panel">
               <div className="panel-head">
-                <h3>Pesan Masuk dari Halaman Contact ({messages.length})</h3>
-                <span>INBOX</span>
+                <div>
+                  <h3>Pesan Masuk dari Formulir Contact ({messages.length})</h3>
+                  <span>INBOX KONSULTASI</span>
+                </div>
               </div>
-              <div className="notice">
-                Pesan dari calon klien yang mengisi formulir di halaman Contact tersimpan langsung ke MongoDB.
+
+              <div className="dash-notice-box">
+                <IconShield size={16} className="notice-icon" />
+                <p>
+                  Pesan pertanyaan atau permintaan diskusi dari calon klien melalui formulir kontak langsung tercatat di sini.
+                </p>
               </div>
 
               {messages.length > 0 ? (
                 messages.map((m) => (
-                  <div key={m.id || m._id} className="message-row">
+                  <div key={m.id || m._id} className="dash-message-card">
                     <div>
-                      <b>
-                        {m.name}{' '}
-                        <span style={{ fontWeight: 400, color: '#777' }}>
-                          · {m.email} {m.business ? `(${m.business})` : ''}
-                        </span>
-                      </b>
-                      <p>
-                        <span style={{ color: '#6845a7', fontWeight: 600 }}>Kebutuhan: {m.need}</span>
+                      <div className="dash-msg-sender-row">
+                        <strong>{m.name}</strong>
+                        <span className="dash-msg-email">· {m.email} {m.business ? `(${m.business})` : ''}</span>
+                      </div>
+                      <p className="dash-msg-text">
+                        <span style={{ color: '#be9eff', fontWeight: 600 }}>Kebutuhan: {m.need || m.subject}</span>
                         <br />
                         {m.message}
                       </p>
-                      <small className="mono" style={{ fontSize: '8px', color: '#777' }}>
-                        {new Date(m.date).toLocaleString('id-ID')}
+                      <small className="dash-msg-date">
+                        {new Date(m.createdAt || m.date).toLocaleString('id-ID')}
                       </small>
                     </div>
                     <button
-                      className="text-link"
-                      style={{ color: '#900', border: 0, background: 'none', cursor: 'pointer' }}
+                      className="dash-table-del-btn"
                       onClick={() => handleDeleteMessage(m.id)}
                     >
-                      Hapus
+                      <IconTrash size={12} />
+                      <span>Hapus</span>
                     </button>
                   </div>
                 ))
               ) : (
                 <div className="empty-state">
                   <b>Belum ada pesan masuk</b>
-                  Pesan dari formulir Contact akan muncul di sini.
+                  Pesan kontak dari calon klien akan muncul di sini.
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB: SETTINGS (SITE & HERO) */}
+          {/* TAB 8: SETTINGS */}
           {activeTab === 'settings' && (
             <div className="dash-panel">
               <div className="panel-head">
-                <h3>Pengaturan Konten Hero & Website</h3>
-                <span>SITE CMS</span>
-              </div>
-              <div className="notice">
-                Ubah headline, deskripsi hero, lokasi, dan kontak. Perubahan disimpan di database dan langsung memperbarui tampilan Hero dan Footer website secara dinamis!
+                <div>
+                  <h3>Pengaturan Konten Hero & Website</h3>
+                  <span>KONTROL TEKS CMS</span>
+                </div>
               </div>
 
-              <form onSubmit={handleSaveSettings}>
+              <div className="dash-notice-box">
+                <IconShield size={16} className="notice-icon" />
+                <p>
+                  Ubah teks judul hero, pertanyaan panduan, nomor kontak, dan email agensi. Perubahan disimpan langsung di database MongoDB Atlas dan otomatis terupdate di seluruh halaman.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveSettings} className="dash-settings-form">
                 <div className="form-grid">
                   <div className="field full">
-                    <label>Hero Kicker</label>
+                    <label>Kicker / Badge Atas Hero</label>
                     <input
+                      type="text"
                       value={settingsForm.heroKicker || ''}
                       onChange={(e) => setSettingsForm({ ...settingsForm, heroKicker: e.target.value })}
-                      placeholder="A NEW POINT OF GROWTH — SNG / 001"
                     />
                   </div>
 
                   <div className="field">
-                    <label>Hero Title Line 1</label>
+                    <label>Judul Hero Baris 1</label>
                     <input
+                      type="text"
                       value={settingsForm.heroTitleLine1 || ''}
                       onChange={(e) => setSettingsForm({ ...settingsForm, heroTitleLine1: e.target.value })}
-                      placeholder="Masih bertumbuh"
                     />
                   </div>
 
                   <div className="field">
-                    <label>Hero Title Line 2 (Gradient Text)</label>
+                    <label>Judul Hero Baris 2</label>
                     <input
+                      type="text"
                       value={settingsForm.heroTitleLine2 || ''}
                       onChange={(e) => setSettingsForm({ ...settingsForm, heroTitleLine2: e.target.value })}
-                      placeholder="dengan cara lama?"
                     />
                   </div>
 
                   <div className="field full">
-                    <label>Hero Question / Subheading</label>
+                    <label>Teks Sub-Judul Hero</label>
                     <textarea
+                      rows={3}
                       value={settingsForm.heroQuestion || ''}
                       onChange={(e) => setSettingsForm({ ...settingsForm, heroQuestion: e.target.value })}
-                      rows="3"
-                    ></textarea>
-                  </div>
-
-                  <div className="field">
-                    <label>Lokasi</label>
-                    <input
-                      value={settingsForm.location || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, location: e.target.value })}
-                      placeholder="Makassar · Indonesia"
                     />
                   </div>
 
                   <div className="field">
-                    <label>Email Kontak</label>
+                    <label>Email Kontak Resmi</label>
                     <input
+                      type="email"
                       value={settingsForm.email || ''}
                       onChange={(e) => setSettingsForm({ ...settingsForm, email: e.target.value })}
-                      placeholder="halo@sngagency.id"
                     />
                   </div>
 
                   <div className="field">
-                    <label>Telepon / WhatsApp</label>
+                    <label>Nomor WhatsApp Resmi</label>
                     <input
+                      type="text"
                       value={settingsForm.phone || ''}
                       onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
-                      placeholder="+62 812 3456 7890"
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label>Brand Tagline</label>
-                    <input
-                      value={settingsForm.brandTagline || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, brandTagline: e.target.value })}
-                      placeholder="STRATEGY. NEXUS. GROWTH."
                     />
                   </div>
 
                   <div className="field full">
-                    <label>Visi Agensi (About Page)</label>
-                    <textarea
-                      value={settingsForm.aboutVision || ''}
-                      onChange={(e) => setSettingsForm({ ...settingsForm, aboutVision: e.target.value })}
-                      rows="3"
-                    ></textarea>
+                    <label>Lokasi Agensi</label>
+                    <input
+                      type="text"
+                      value={settingsForm.location || ''}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, location: e.target.value })}
+                    />
                   </div>
                 </div>
 
-                <div style={{ marginTop: '20px' }}>
-                  <button type="submit" className="btn btn-dark">
-                    Simpan Pengaturan ke MongoDB ↗
+                <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button type="submit" className="dash-btn-primary">
+                    <IconCheck size={14} />
+                    <span>Simpan Pengaturan</span>
                   </button>
                 </div>
               </form>
@@ -856,70 +1477,79 @@ export default function AdminDashboardPage() {
       {/* MODAL: ORDER DETAIL & ADMIN NOTE */}
       {orderDetailModal && (
         <div
-          className="modal-backdrop open"
+          className="cosmic-modal-overlay open"
           role="dialog"
           aria-modal="true"
           onClick={(e) => {
             if (e.target === e.currentTarget) setOrderDetailModal(null);
           }}
         >
-          <div className="modal">
-            <div className="modal-head">
+          <div className="cosmic-auth-card" style={{ maxWidth: '600px' }}>
+            <div className="cosmic-card-glow"></div>
+            <div className="cosmic-modal-head">
               <div>
-                <small>SNG / Order Detail</small>
-                <h2>Detail Permintaan Layanan</h2>
+                <span className="cosmic-badge-kicker">SNG / ORDER DETAIL</span>
+                <h2 className="cosmic-auth-title">Detail Permintaan Layanan</h2>
               </div>
               <button
-                className="modal-close"
+                className="cosmic-modal-close-btn"
                 onClick={() => setOrderDetailModal(null)}
               >
-                ×
+                ✕
               </button>
             </div>
-            <div className="modal-body">
-              <p>
-                <strong>{orderDetailModal.serviceName}</strong> ({orderDetailModal.id})<br />
-                Diajukan pada: {new Date(orderDetailModal.createdAt).toLocaleString('id-ID')}
-              </p>
-              <div style={{ background: 'rgba(255,255,255,.4)', padding: '14px', borderRadius: '6px', margin: '14px 0', fontSize: '11px', lineHeight: '1.8' }}>
-                <b>Klien:</b> {orderDetailModal.customer?.name} ({orderDetailModal.customer?.email})<br />
-                <b>Bisnis / Brand:</b> {orderDetailModal.customer?.business || '-'}<br />
-                <b>No. WhatsApp / Telepon:</b> {orderDetailModal.customer?.phone || '-'}<br />
-                <b>Jenis Kebutuhan:</b> {orderDetailModal.projectType}<br />
-                <b>Anggaran:</b> {orderDetailModal.budget}<br />
-                <b>Status Saat Ini:</b> <span className="status">{orderDetailModal.status}</span>
+
+            <div className="cosmic-modal-body" style={{ color: '#e6e4f3', fontSize: '12px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.04)', padding: '14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', marginBottom: '16px', lineHeight: '1.7' }}>
+                <p style={{ margin: 0 }}>
+                  <strong>Layanan:</strong> {orderDetailModal.serviceName} ({orderDetailModal.id})<br />
+                  <strong>Klien:</strong> {orderDetailModal.customer?.name} ({orderDetailModal.customer?.email})<br />
+                  <strong>Bisnis:</strong> {orderDetailModal.customer?.business || '-'}<br />
+                  <strong>WhatsApp:</strong> {orderDetailModal.customer?.phone || '-'}<br />
+                  <strong>Anggaran:</strong> {orderDetailModal.budget}<br />
+                  <strong>Status:</strong> {orderDetailModal.status}
+                </p>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ font: '9px var(--mono)', textTransform: 'uppercase', color: '#636671', display: 'block', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '10px', color: '#be9eff', textTransform: 'uppercase', marginBottom: '6px', fontFamily: 'var(--mono)' }}>
                   Brief Proyek Klien:
                 </label>
-                <div style={{ padding: '12px', background: 'white', borderRadius: '5px', fontSize: '11px', color: '#333', border: '1px solid rgba(20,20,30,.15)', maxHeight: '150px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', fontSize: '11px', maxHeight: '140px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
                   {orderDetailModal.brief}
                 </div>
               </div>
 
-              <div className="field">
-                <label>Catatan Admin untuk Klien (Akan Muncul di Dashboard Klien):</label>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '10px', color: '#be9eff', textTransform: 'uppercase', marginBottom: '6px', fontFamily: 'var(--mono)' }}>
+                  Catatan / Rekomendasi Admin (Dapat dilihat Klien di Client Space):
+                </label>
                 <textarea
+                  rows={4}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(180,140,255,0.3)', color: '#fff', fontSize: '12px', outline: 'none' }}
+                  placeholder="Tuliskan catatan konsultasi, estimasi penawaran, atau langkah berikutnya..."
                   value={adminNoteInput}
                   onChange={(e) => setAdminNoteInput(e.target.value)}
-                  placeholder="Tuliskan respon, jadwal konsultasi, atau penawaran untuk klien di sini..."
-                  rows="4"
-                ></textarea>
+                />
               </div>
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-outline"
-                style={{ color: '#343540', borderColor: 'rgba(20,20,30,.2)' }}
-                onClick={() => setOrderDetailModal(null)}
-              >
-                Tutup
-              </button>
-              <button className="btn btn-dark" onClick={handleSaveAdminNote}>
-                Simpan Catatan ke Klien ↗
-              </button>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="cosmic-btn-ghost"
+                  onClick={() => setOrderDetailModal(null)}
+                >
+                  Tutup
+                </button>
+                <button
+                  type="button"
+                  className="cosmic-btn-primary"
+                  onClick={handleSaveAdminNote}
+                >
+                  <IconCheck size={13} />
+                  <span>Simpan Catatan</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -928,148 +1558,97 @@ export default function AdminDashboardPage() {
       {/* MODAL: SERVICE CREATE / EDIT */}
       {serviceModal.open && (
         <div
-          className="modal-backdrop open"
+          className="cosmic-modal-overlay open"
           role="dialog"
           aria-modal="true"
           onClick={(e) => {
             if (e.target === e.currentTarget) setServiceModal({ ...serviceModal, open: false });
           }}
         >
-          <div className="modal">
-            <div className="modal-head">
+          <div className="cosmic-auth-card" style={{ maxWidth: '580px' }}>
+            <div className="cosmic-card-glow"></div>
+            <div className="cosmic-modal-head">
               <div>
-                <small>SNG / Layanan CRUD</small>
-                <h2>{serviceModal.isEdit ? 'Edit Layanan' : 'Tambah Layanan Baru'}</h2>
+                <span className="cosmic-badge-kicker">SNG / LAYANAN CMS</span>
+                <h2 className="cosmic-auth-title">
+                  {serviceModal.isEdit ? 'Ubah Data Layanan' : 'Tambah Layanan Baru'}
+                </h2>
               </div>
               <button
-                className="modal-close"
+                className="cosmic-modal-close-btn"
                 onClick={() => setServiceModal({ ...serviceModal, open: false })}
               >
-                ×
+                ✕
               </button>
             </div>
-            <form onSubmit={handleSaveService}>
-              <div className="modal-body">
-                <div className="field">
-                  <label>ID Layanan (Unik)</label>
+
+            <form onSubmit={handleSaveService} className="cosmic-auth-form">
+              <div className="cosmic-form-group">
+                <label>Nama Layanan</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Digital Campaign & Ads"
+                  value={serviceModal.data.name}
+                  onChange={(e) =>
+                    setServiceModal({ ...serviceModal, data: { ...serviceModal.data, name: e.target.value } })
+                  }
+                />
+              </div>
+
+              <div className="cosmic-form-row">
+                <div className="cosmic-form-group">
+                  <label>Kategori</label>
+                  <select
+                    className="table-select"
+                    value={serviceModal.data.category}
+                    onChange={(e) =>
+                      setServiceModal({ ...serviceModal, data: { ...serviceModal.data, category: e.target.value } })
+                    }
+                  >
+                    <option value="strategy">Strategy & Data</option>
+                    <option value="content">Content & Social</option>
+                    <option value="digital">Digital Channel</option>
+                    <option value="integration">Integration & Ecosystem</option>
+                  </select>
+                </div>
+
+                <div className="cosmic-form-group">
+                  <label>Icon / Simbol</label>
                   <input
-                    value={serviceModal.data.id}
-                    readOnly={serviceModal.isEdit}
+                    type="text"
+                    value={serviceModal.data.icon}
                     onChange={(e) =>
-                      setServiceModal({
-                        ...serviceModal,
-                        data: { ...serviceModal.data, id: e.target.value }
-                      })
+                      setServiceModal({ ...serviceModal, data: { ...serviceModal.data, icon: e.target.value } })
                     }
-                    placeholder="SNG-09"
-                    required
-                  />
-                </div>
-
-                <div className="field">
-                  <label>Nama Layanan *</label>
-                  <input
-                    value={serviceModal.data.name}
-                    onChange={(e) =>
-                      setServiceModal({
-                        ...serviceModal,
-                        data: { ...serviceModal.data, name: e.target.value }
-                      })
-                    }
-                    placeholder="Nama layanan"
-                    required
-                  />
-                </div>
-
-                <div className="form-grid">
-                  <div className="field">
-                    <label>Kategori</label>
-                    <select
-                      value={serviceModal.data.category}
-                      onChange={(e) =>
-                        setServiceModal({
-                          ...serviceModal,
-                          data: { ...serviceModal.data, category: e.target.value }
-                        })
-                      }
-                    >
-                      <option value="strategy">Strategy & Data</option>
-                      <option value="content">Content & Social</option>
-                      <option value="digital">Digital Channel</option>
-                      <option value="integration">Integration</option>
-                    </select>
-                  </div>
-
-                  <div className="field">
-                    <label>Simbol / Icon</label>
-                    <input
-                      value={serviceModal.data.icon}
-                      onChange={(e) =>
-                        setServiceModal({
-                          ...serviceModal,
-                          data: { ...serviceModal.data, icon: e.target.value }
-                        })
-                      }
-                      placeholder="◎, ✳, ⌕, ↗, ▣, ⌘, ◉, ⌬, ✧"
-                    />
-                  </div>
-                </div>
-
-                <div className="field">
-                  <label>Deskripsi Layanan *</label>
-                  <textarea
-                    value={serviceModal.data.desc}
-                    onChange={(e) =>
-                      setServiceModal({
-                        ...serviceModal,
-                        data: { ...serviceModal.data, desc: e.target.value }
-                      })
-                    }
-                    placeholder="Jelaskan ruang lingkup layanan..."
-                    required
-                    rows="3"
-                  ></textarea>
-                </div>
-
-                <div className="field">
-                  <label>Deliverables (Output Proyek)</label>
-                  <input
-                    value={serviceModal.data.deliverables || ''}
-                    onChange={(e) =>
-                      setServiceModal({
-                        ...serviceModal,
-                        data: { ...serviceModal.data, deliverables: e.target.value }
-                      })
-                    }
-                    placeholder="Contoh: Audit akun, kalender konten, laporan evaluasi bulanan."
-                  />
-                </div>
-
-                <div className="field">
-                  <label>Label Badge</label>
-                  <input
-                    value={serviceModal.data.label || ''}
-                    onChange={(e) =>
-                      setServiceModal({
-                        ...serviceModal,
-                        data: { ...serviceModal.data, label: e.target.value }
-                      })
-                    }
-                    placeholder="Social & Content"
                   />
                 </div>
               </div>
-              <div className="modal-footer">
+
+              <div className="cosmic-form-group">
+                <label>Deskripsi Singkat</label>
+                <textarea
+                  rows={3}
+                  required
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(180,140,255,0.3)', color: '#fff', fontSize: '12px' }}
+                  value={serviceModal.data.desc}
+                  onChange={(e) =>
+                    setServiceModal({ ...serviceModal, data: { ...serviceModal.data, desc: e.target.value } })
+                  }
+                />
+              </div>
+
+              <div className="cosmic-form-actions">
                 <button
                   type="button"
-                  className="btn btn-outline"
-                  style={{ color: '#343540', borderColor: 'rgba(20,20,30,.2)' }}
+                  className="cosmic-btn-ghost"
                   onClick={() => setServiceModal({ ...serviceModal, open: false })}
                 >
                   Batal
                 </button>
-                <button type="submit" className="btn btn-dark">
-                  {serviceModal.isEdit ? 'Perbarui Layanan' : 'Simpan Layanan'} ↗
+                <button type="submit" className="cosmic-btn-primary">
+                  <IconCheck size={13} />
+                  <span>Simpan Layanan</span>
                 </button>
               </div>
             </form>
@@ -1078,118 +1657,131 @@ export default function AdminDashboardPage() {
       )}
 
       {/* MODAL: ARTICLE CREATE / EDIT */}
-      {articleModal.open && (
+      {/* BLOG WRITER STUDIO (FULL RICH BLOG EDITING & PREVIEW) */}
+      <BlogWriterStudio
+        isOpen={articleModal.open}
+        onClose={() => setArticleModal({ ...articleModal, open: false })}
+        article={articleModal.data}
+        isEdit={articleModal.isEdit}
+        onSave={handleSaveArticle}
+      />
+
+      {/* MODAL: TEAM MEMBER CREATE / EDIT */}
+      {teamModal.open && (
         <div
-          className="modal-backdrop open"
+          className="cosmic-modal-overlay open"
           role="dialog"
           aria-modal="true"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setArticleModal({ ...articleModal, open: false });
+            if (e.target === e.currentTarget) setTeamModal({ ...teamModal, open: false });
           }}
         >
-          <div className="modal">
-            <div className="modal-head">
+          <div className="cosmic-auth-card" style={{ maxWidth: '600px' }}>
+            <div className="cosmic-card-glow"></div>
+            <div className="cosmic-modal-head">
               <div>
-                <small>SNG / Artikel CRUD</small>
-                <h2>{articleModal.isEdit ? 'Edit Artikel' : 'Tambah Artikel Baru'}</h2>
+                <span className="cosmic-badge-kicker">SNG / TEAM CMS</span>
+                <h2 className="cosmic-auth-title">
+                  {teamModal.isEdit ? 'Ubah Data Anggota Tim' : 'Tambah Anggota Tim Baru'}
+                </h2>
               </div>
               <button
-                className="modal-close"
-                onClick={() => setArticleModal({ ...articleModal, open: false })}
+                className="cosmic-modal-close-btn"
+                onClick={() => setTeamModal({ ...teamModal, open: false })}
               >
-                ×
+                ✕
               </button>
             </div>
-            <form onSubmit={handleSaveArticle}>
-              <div className="modal-body">
-                <div className="form-grid">
-                  <div className="field">
-                    <label>Kategori</label>
-                    <input
-                      value={articleModal.data.category}
-                      onChange={(e) =>
-                        setArticleModal({
-                          ...articleModal,
-                          data: { ...articleModal.data, category: e.target.value }
-                        })
-                      }
-                      placeholder="DIGITAL STRATEGY"
-                      required
-                    />
-                  </div>
 
-                  <div className="field">
-                    <label>Waktu Baca</label>
-                    <input
-                      value={articleModal.data.read}
-                      onChange={(e) =>
-                        setArticleModal({
-                          ...articleModal,
-                          data: { ...articleModal.data, read: e.target.value }
-                        })
-                      }
-                      placeholder="4 MIN READ"
-                    />
-                  </div>
-                </div>
-
-                <div className="field">
-                  <label>Judul Artikel *</label>
+            <form onSubmit={handleSaveTeamMember} className="cosmic-auth-form">
+              <div className="cosmic-form-row">
+                <div className="cosmic-form-group">
+                  <label>Nama Lengkap</label>
                   <input
-                    value={articleModal.data.title}
-                    onChange={(e) =>
-                      setArticleModal({
-                        ...articleModal,
-                        data: { ...articleModal.data, title: e.target.value }
-                      })
-                    }
-                    placeholder="Judul artikel..."
+                    type="text"
                     required
+                    placeholder="Nama anggota tim"
+                    value={teamModal.data.name}
+                    onChange={(e) =>
+                      setTeamModal({ ...teamModal, data: { ...teamModal.data, name: e.target.value } })
+                    }
                   />
                 </div>
 
-                <div className="field">
-                  <label>Ringkasan (Excerpt) *</label>
-                  <textarea
-                    value={articleModal.data.excerpt}
-                    onChange={(e) =>
-                      setArticleModal({
-                        ...articleModal,
-                        data: { ...articleModal.data, excerpt: e.target.value }
-                      })
-                    }
-                    placeholder="Ringkasan singkat artikel yang tampil pada kartu preview..."
+                <div className="cosmic-form-group">
+                  <label>Role / Posisi Jabatan</label>
+                  <input
+                    type="text"
                     required
-                    rows="2"
-                  ></textarea>
-                </div>
-
-                <div className="field">
-                  <label>Isi Lengkap Artikel (Pisahkan paragraf dengan 2 baris baru/Enter)</label>
-                  <textarea
-                    value={articleModal.data.body}
+                    placeholder="Contoh: Lead Creative Strategist"
+                    value={teamModal.data.role}
                     onChange={(e) =>
-                      setArticleModal({
-                        ...articleModal,
-                        data: { ...articleModal.data, body: e.target.value }
-                      })
+                      setTeamModal({ ...teamModal, data: { ...teamModal.data, role: e.target.value } })
                     }
-                    placeholder="Tuliskan isi artikel lengkap di sini..."
-                    rows="6"
-                  ></textarea>
+                  />
                 </div>
               </div>
-              <div className="modal-footer">
+
+              <div className="cosmic-form-group">
+                <label>URL Foto Profil</label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={teamModal.data.photo}
+                  onChange={(e) =>
+                    setTeamModal({ ...teamModal, data: { ...teamModal.data, photo: e.target.value } })
+                  }
+                />
+              </div>
+
+              <div className="cosmic-form-group">
+                <label>Keahlian / Skills (Pisahkan dengan tanda koma)</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: SEO, Google Analytics, Copywriting"
+                  value={teamModal.data.skills}
+                  onChange={(e) =>
+                    setTeamModal({ ...teamModal, data: { ...teamModal.data, skills: e.target.value } })
+                  }
+                />
+              </div>
+
+              <div className="cosmic-form-group">
+                <label>Deskripsi Singkat / Bio</label>
+                <textarea
+                  rows={2}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(180,140,255,0.3)', color: '#fff', fontSize: '12px' }}
+                  placeholder="Fokus dan keunggulan kerja..."
+                  value={teamModal.data.bio}
+                  onChange={(e) =>
+                    setTeamModal({ ...teamModal, data: { ...teamModal.data, bio: e.target.value } })
+                  }
+                />
+              </div>
+
+              <div className="cosmic-form-group">
+                <label>Portofolio / Pengalaman Kunci</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Menangani 50+ UMKM di Makassar"
+                  value={teamModal.data.portfolio}
+                  onChange={(e) =>
+                    setTeamModal({ ...teamModal, data: { ...teamModal.data, portfolio: e.target.value } })
+                  }
+                />
+              </div>
+
+              <div className="cosmic-form-actions">
                 <button
                   type="button"
-                  className="btn btn-outline"
-                  style={{ color: '#343540', borderColor: 'rgba(20,20,30,.2)' }}
-                  onClick={() => setArticleModal({ ...articleModal, open: false })}
+                  className="cosmic-btn-ghost"
+                  onClick={() => setTeamModal({ ...teamModal, open: false })}
                 >
                   Batal
                 </button>
-                <button type="submit" className="btn btn-dark">
-                  {articleModal.isEdit ? 'Perbarui Artikel' : 'Simpan Artikel'} ↗
+                <button type="submit" className="cosmic-btn-primary">
+                  <IconCheck size={13} />
+                  <span>Simpan Data Tim</span>
                 </button>
               </div>
             </form>

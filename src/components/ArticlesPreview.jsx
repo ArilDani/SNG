@@ -37,7 +37,7 @@ export default function ArticlesPreview() {
                 <p>{a.excerpt}</p>
                 <button
                   className="article-read-btn"
-                  onClick={() => navigateTo('article-detail', a.id)}
+                  onClick={() => navigateTo('article-detail', a.id || a._id)}
                 >
                   Baca artikel ↗
                 </button>

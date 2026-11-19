@@ -51,3 +51,17 @@ export const updateSettings = (data) => fetchJson('/settings', { method: 'PUT', 
 // Dashboard Stats
 export const getStats = () => fetchJson('/stats');
 
+// Behind the SNG (Team)
+export const getTeam = () => fetchJson('/team');
+export const createTeamMember = (data) => fetchJson('/team', { method: 'POST', body: JSON.stringify(data) });
+export const updateTeamMember = (id, data) => fetchJson(`/team/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteTeamMember = (id) => fetchJson(`/team/${id}`, { method: 'DELETE' });
+
+// Auth & User Management (MongoDB Atlas)
+export const loginUser = (credentials) => fetchJson('/auth/login', { method: 'POST', body: JSON.stringify(credentials) });
+export const registerUser = (userData) => fetchJson('/auth/register', { method: 'POST', body: JSON.stringify(userData) });
+export const getUsers = () => fetchJson('/users');
+export const updateUserRole = (id, role) => fetchJson(`/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
+export const deleteUser = (id) => fetchJson(`/users/${id}`, { method: 'DELETE' });
+
+

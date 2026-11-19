@@ -14,6 +14,7 @@ import ArticleDetailPage from './pages/ArticleDetailPage';
 import ContactPage from './pages/ContactPage';
 import UserDashboardPage from './pages/UserDashboardPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import AuthPage from './pages/AuthPage';
 
 function TopProgress() {
   const barRef = useRef(null);
@@ -105,6 +106,9 @@ function MainContent() {
       {route === 'contact' && <ContactPage />}
       {route === 'user-dashboard' && <UserDashboardPage />}
       {route === 'admin-dashboard' && <AdminDashboardPage />}
+      {route === 'login' && <AuthPage defaultTab="login" />}
+      {route === 'register' && <AuthPage defaultTab="register" />}
+      {route === 'auth' && <AuthPage defaultTab="login" />}
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import TeamSection from '../components/TeamSection';
 
 export default function AboutPage() {
   const { settings } = useApp();
@@ -126,6 +127,9 @@ export default function AboutPage() {
           </div>
         </div>
       </div>
+
+      {/* 04 / Behind the SNG Team Section */}
+      <TeamSection inAboutPage={true} />
     </div>
   );
 }

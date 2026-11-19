@@ -2,9 +2,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import * as api from '../api';
 import sngLogo from '../assets/sng-logo-clean.png';
+import {
+  IconOverview,
+  IconOrders,
+  IconUser,
+  IconExternal,
+  IconLogout,
+  IconPlus,
+  IconGlobe,
+  IconCheck,
+  IconShield
+} from '../components/Icons';
 
 export default function UserDashboardPage() {
-  const { user, logout, navigateTo, setIsAuthModalOpen, updateUser, showToast } = useApp();
+  const { user, logout, navigateTo, updateUser, showToast } = useApp();
   const [activeTab, setActiveTab] = useState('overview');
   const [orders, setOrders] = useState([]);
 
@@ -22,25 +33,6 @@ export default function UserDashboardPage() {
     fetchUserOrders();
   }, [fetchUserOrders]);
 
-  const handleLoginUserDemo = () => {
-    updateUser({
-      name: 'Budi Santoso (Klien Demo)',
-      email: 'budi@tokoberkah.com',
-      role: 'user'
-    });
-    showToast('Berhasil masuk sebagai Akun Klien Demo.');
-  };
-
-  const handleLoginAdminDemo = () => {
-    updateUser({
-      name: 'Admin SNG',
-      email: 'admin@sngagency.id',
-      role: 'admin'
-    });
-    showToast('Berhasil masuk sebagai Admin Console.');
-    navigateTo('admin-dashboard');
-  };
-
   if (!user) {
     return (
       <div className="app-page active">
@@ -51,9 +43,15 @@ export default function UserDashboardPage() {
               <span>SNG PORTAL<small>CLIENT SPACE</small></span>
             </div>
             <div className="dash-label">WORKSPACE</div>
-            <button className="active">◫ &nbsp; Ringkasan</button>
+            <button className="active">
+              <IconOverview size={15} />
+              <span>Ringkasan</span>
+            </button>
             <div className="dash-label">NAVIGATION</div>
-            <button onClick={() => navigateTo('home')}>↗ &nbsp; Website SNG</button>
+            <button onClick={() => navigateTo('home')}>
+              <IconGlobe size={15} />
+              <span>Website SNG</span>
+            </button>
           </aside>
           <div className="dash-main">
             <div className="dash-top">
@@ -66,16 +64,15 @@ export default function UserDashboardPage() {
             <div className="dash-panel">
               <div className="empty-state">
                 <b>Masuk untuk melihat Client Space</b>
-                Login sebagai user untuk melihat pesanan dan profil Anda.
+                Login sebagai klien untuk melihat riwayat pesanan dan status konsultasi Anda.
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
-                  <button className="btn btn-dark" onClick={handleLoginUserDemo}>
-                    👤 Masuk dengan Akun Klien Demo ↗
+                  <button className="dash-btn-primary" onClick={() => navigateTo('login')}>
+                    <span>Masuk ke Akun Klien</span>
+                    <IconExternal size={13} />
                   </button>
-                  <button className="btn btn-outline" style={{ color: '#171821', borderColor: 'rgba(20,20,30,.25)' }} onClick={handleLoginAdminDemo}>
-                    ⚡ Buka Admin Demo ↗
-                  </button>
-                  <button className="btn btn-outline" style={{ color: '#171821', borderColor: 'rgba(20,20,30,.25)' }} onClick={() => setIsAuthModalOpen(true)}>
-                    Pilihan Lain ↗
+                  <button className="dash-btn-secondary" onClick={() => navigateTo('register')}>
+                    <span>Daftar Akun Baru</span>
+                    <IconPlus size={13} />
                   </button>
                 </div>
               </div>
@@ -110,108 +107,100 @@ export default function UserDashboardPage() {
             className={activeTab === 'overview' ? 'active' : ''}
             onClick={() => setActiveTab('overview')}
           >
-            ◫ &nbsp; Ringkasan
+            <IconOverview size={15} />
+            <span>Ringkasan</span>
           </button>
           <button
             className={activeTab === 'orders' ? 'active' : ''}
             onClick={() => setActiveTab('orders')}
           >
-            ▤ &nbsp; Pesanan saya
+            <IconOrders size={15} />
+            <span>Pesanan Saya</span>
+            <span className="dash-count-badge">{orders.length}</span>
           </button>
           <button
             className={activeTab === 'profile' ? 'active' : ''}
             onClick={() => setActiveTab('profile')}
           >
-            ◉ &nbsp; Profil
+            <IconUser size={15} />
+            <span>Profil Akun</span>
           </button>
 
           <div className="dash-label">NAVIGATION</div>
           <button onClick={() => navigateTo('services')}>
-            ＋ &nbsp; Pesan layanan
+            <IconPlus size={15} />
+            <span>Pesan Layanan</span>
           </button>
           <button onClick={() => navigateTo('home')}>
-            ↗ &nbsp; Website SNG
+            <IconGlobe size={15} />
+            <span>Website SNG</span>
+            <IconExternal size={11} style={{ marginLeft: 'auto', opacity: 0.6 }} />
           </button>
-          <button onClick={logout}>
-            ⇥ &nbsp; Keluar
+          <button onClick={logout} className="dash-btn-logout">
+            <IconLogout size={15} />
+            <span>Keluar</span>
           </button>
         </aside>
 
         <div className="dash-main">
           <div className="dash-top">
             <div>
+              <div className="dash-breadcrumb">
+                <span className="dash-breadcrumb-root">CLIENT SPACE</span>
+                <span className="dash-breadcrumb-separator">/</span>
+                <span className="dash-breadcrumb-active">
+                  {activeTab === 'orders' ? 'PESANAN SAYA' : activeTab === 'profile' ? 'PROFIL' : 'RINGKASAN'}
+                </span>
+              </div>
               <h1 id="userDashTitle">
-                {activeTab === 'orders' ? 'Pesanan saya' : activeTab === 'profile' ? 'Profil' : 'Ringkasan'}
+                {activeTab === 'orders' ? 'Pesanan Saya' : activeTab === 'profile' ? 'Profil Akun' : 'Ringkasan Client Space'}
               </h1>
               <p id="userWelcome">
                 Halo, {user.name}. Pantau permintaan layanan dan progres proyek Anda di sini.
               </p>
             </div>
-            <span className="tag">CLIENT PORTAL / 01</span>
+            <div className="dash-top-actions">
+              <div className="dash-user-profile-card">
+                <div className="user-avatar-initials client-avatar">
+                  {(user?.name || 'K').charAt(0).toUpperCase()}
+                </div>
+                <div className="user-profile-info">
+                  <strong className="user-profile-name">{user?.name}</strong>
+                  <span className="user-profile-role-tag client-tag">
+                    <IconUser size={10} />
+                    <span>KLIEN SNG</span>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {activeTab === 'profile' && (
             <div className="dash-panel">
               <div className="panel-head">
-                <h3>Informasi akun</h3>
-                <span>CLIENT PROFILE</span>
-              </div>
-              <div className="field">
-                <label>Nama</label>
-                <input readOnly value={user.name} />
-              </div>
-              <div className="field">
-                <label>Email</label>
-                <input readOnly value={user.email} />
-              </div>
-              <p className="form-note">
-                Profil tersimpan pada database MongoDB Atlas dan terintegrasi dengan Client Portal SNG.
-              </p>
-            </div>
-          )}
-
-          {activeTab === 'orders' && (
-            <div className="dash-panel">
-              <div className="panel-head">
-                <h3>Semua pesanan Anda</h3>
-                <span>{orders.length} RECORDS</span>
-              </div>
-              {orders.length > 0 ? (
-                orders.map((o) => (
-                  <article key={o.id || o._id} className="order-card">
-                    <div className="order-card-top">
-                      <div>
-                        <h3>{o.serviceName}</h3>
-                        <p>{o.id} · {new Date(o.createdAt).toLocaleDateString('id-ID')}</p>
-                      </div>
-                      <span className={`status ${getStatusClass(o.status)}`}>{o.status}</span>
-                    </div>
-                    <div className="order-card-meta">
-                      <span>BUSINESS · {o.customer?.business || '-'}</span>
-                      <span>TYPE · {o.projectType}</span>
-                      <span>BUDGET · {o.budget}</span>
-                    </div>
-                    {o.adminNote && (
-                      <p style={{ marginTop: '12px' }}>
-                        <b>Catatan SNG:</b> {o.adminNote}
-                      </p>
-                    )}
-                  </article>
-                ))
-              ) : (
-                <div className="empty-state">
-                  <b>Belum ada pesanan</b>
-                  Pesanan layanan yang Anda kirim akan muncul di sini.
-                  <br />
-                  <button
-                    className="btn btn-dark"
-                    style={{ marginTop: '15px' }}
-                    onClick={() => navigateTo('services')}
-                  >
-                    Jelajahi layanan ↗
-                  </button>
+                <div>
+                  <h3>Informasi Akun Klien</h3>
+                  <span>CLIENT PROFILE</span>
                 </div>
-              )}
+              </div>
+              <div style={{ display: 'grid', gap: '14px', maxWidth: '500px' }}>
+                <div className="field">
+                  <label>Nama Lengkap</label>
+                  <input readOnly value={user.name || ''} />
+                </div>
+                <div className="field">
+                  <label>Alamat Email</label>
+                  <input readOnly value={user.email || ''} />
+                </div>
+                <div className="field">
+                  <label>Nomor WhatsApp</label>
+                  <input readOnly value={user.phone || '-'} />
+                </div>
+                <div className="field">
+                  <label>Status Peran (Role)</label>
+                  <input readOnly value="User / Klien (Akses Client Space)" />
+                </div>
+              </div>
             </div>
           )}
 
@@ -219,74 +208,150 @@ export default function UserDashboardPage() {
             <>
               <div className="metric-grid">
                 <div className="metric">
-                  <small>Total permintaan</small>
+                  <div className="metric-header-row">
+                    <small>Total Permintaan</small>
+                    <IconOrders size={16} />
+                  </div>
                   <strong>{orders.length}</strong>
-                  <span>Seluruh pesanan Anda</span>
+                  <span>Brief yang diajukan</span>
                 </div>
-                <div className="metric">
-                  <small>Diproses</small>
-                  <strong>{pendingCount}</strong>
-                  <span>Menunggu / berjalan</span>
-                </div>
-                <div className="metric">
-                  <small>Selesai</small>
-                  <strong>{doneCount}</strong>
-                  <span>Proyek selesai</span>
-                </div>
-                <div className="metric">
-                  <small>Account</small>
-                  <strong>01</strong>
-                  <span>Client portal</span>
-                </div>
-              </div>
 
-              <div className="notice">
-                Informasi status akan diperbarui oleh tim SNG setelah permintaan ditinjau dan tersimpan di database MongoDB Atlas.
+                <div className="metric">
+                  <div className="metric-header-row">
+                    <small>Dalam Proses / Review</small>
+                    <IconShield size={16} style={{ color: '#ffb347' }} />
+                  </div>
+                  <strong style={{ color: '#ffb347' }}>{pendingCount}</strong>
+                  <span>Menunggu / dikerjakan</span>
+                </div>
+
+                <div className="metric">
+                  <div className="metric-header-row">
+                    <small>Selesai</small>
+                    <IconCheck size={16} style={{ color: '#4ade80' }} />
+                  </div>
+                  <strong style={{ color: '#4ade80' }}>{doneCount}</strong>
+                  <span>Layanan tuntas</span>
+                </div>
               </div>
 
               <div className="dash-panel">
                 <div className="panel-head">
-                  <h3>Aktivitas terbaru</h3>
-                  <span>RECENT ORDERS</span>
+                  <div>
+                    <h3>Pesanan Aktif Terbaru</h3>
+                    <span>STATUS PROYEK</span>
+                  </div>
+                  <button
+                    className="dash-link-action"
+                    onClick={() => setActiveTab('orders')}
+                  >
+                    <span>Semua Pesanan</span>
+                    <IconExternal size={12} />
+                  </button>
                 </div>
+
                 {orders.length > 0 ? (
-                  orders.slice(0, 3).map((o) => (
-                    <article key={o.id || o._id} className="order-card">
-                      <div className="order-card-top">
-                        <div>
-                          <h3>{o.serviceName}</h3>
-                          <p>{o.id} · {new Date(o.createdAt).toLocaleDateString('id-ID')}</p>
+                  <div style={{ display: 'grid', gap: '12px' }}>
+                    {orders.slice(0, 3).map((o) => (
+                      <div key={o.id || o._id} className="dash-client-order-card">
+                        <div className="dash-client-order-top">
+                          <div>
+                            <h4>{o.serviceName}</h4>
+                            <span className="order-id-meta">ID: {o.id} · {new Date(o.createdAt).toLocaleDateString('id-ID')}</span>
+                          </div>
+                          <span className={`status ${getStatusClass(o.status)}`}>
+                            {o.status}
+                          </span>
                         </div>
-                        <span className={`status ${getStatusClass(o.status)}`}>{o.status}</span>
+                        {o.adminNote && (
+                          <div className="client-admin-note-box">
+                            <strong>Catatan dari Tim SNG:</strong>
+                            <p>{o.adminNote}</p>
+                          </div>
+                        )}
                       </div>
-                      <div className="order-card-meta">
-                        <span>BUSINESS · {o.customer?.business || '-'}</span>
-                        <span>TYPE · {o.projectType}</span>
-                        <span>BUDGET · {o.budget}</span>
-                      </div>
-                      {o.adminNote && (
-                        <p style={{ marginTop: '12px' }}>
-                          <b>Catatan SNG:</b> {o.adminNote}
-                        </p>
-                      )}
-                    </article>
-                  ))
+                    ))}
+                  </div>
                 ) : (
                   <div className="empty-state">
-                    <b>Belum ada aktivitas</b>
-                    Mulai dengan memilih layanan yang sesuai kebutuhan bisnis Anda.
+                    <b>Belum ada pesanan aktif</b>
+                    Jelajahi layanan kami dan ajukan brief konsultasi Anda.
                     <br />
                     <button
-                      className="btn btn-dark"
-                      style={{ marginTop: '15px' }}
+                      className="dash-btn-primary"
+                      style={{ marginTop: '16px' }}
                       onClick={() => navigateTo('services')}
                     >
-                      Pilih layanan ↗
+                      <IconPlus size={13} />
+                      <span>Eksplorasi Layanan</span>
                     </button>
                   </div>
                 )}
               </div>
             </>
+          )}
+
+          {activeTab === 'orders' && (
+            <div className="dash-panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Semua Pesanan Layanan Anda ({orders.length})</h3>
+                  <span>RIWAYAT KONSULTASI</span>
+                </div>
+              </div>
+
+              {orders.length > 0 ? (
+                <div style={{ display: 'grid', gap: '14px' }}>
+                  {orders.map((o) => (
+                    <div key={o.id || o._id} className="dash-client-order-card">
+                      <div className="dash-client-order-top">
+                        <div>
+                          <h4>{o.serviceName}</h4>
+                          <span className="order-id-meta">
+                            ID: {o.id} · Diajukan pada {new Date(o.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <span className={`status ${getStatusClass(o.status)}`}>
+                          {o.status}
+                        </span>
+                      </div>
+
+                      <div className="client-order-details-grid">
+                        <div>
+                          <small>BISNIS / BRAND:</small>
+                          <p>{o.customer?.business || '-'}</p>
+                        </div>
+                        <div>
+                          <small>ESTIMASI ANGGARAN:</small>
+                          <p>{o.budget || '-'}</p>
+                        </div>
+                        <div>
+                          <small>TIPE KEBUTUHAN:</small>
+                          <p>{o.projectType || '-'}</p>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: '10px' }}>
+                        <small style={{ color: '#8d89a4', fontSize: '9px', fontFamily: 'var(--mono)' }}>RINGKASAN BRIEF:</small>
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#cac5df', lineHeight: '1.6' }}>{o.brief}</p>
+                      </div>
+
+                      {o.adminNote && (
+                        <div className="client-admin-note-box">
+                          <strong>Catatan & Tindak Lanjut dari Tim SNG:</strong>
+                          <p>{o.adminNote}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <b>Belum ada pesanan</b>
+                  Silakan kirim brief konsultasi dari katalog layanan.
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

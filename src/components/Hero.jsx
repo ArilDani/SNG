@@ -32,8 +32,8 @@ export default function Hero() {
           <i className="pulse"></i> {settings.heroKicker || 'A NEW POINT OF GROWTH — SNG / 001'}
         </div>
         <h1 className="hero-fade-up">
-          <span className="hero-line hero-line-1">{settings.heroTitleLine1 || 'Masih bertumbuh'}</span>
-          <span className="hero-line hero-line-2 gradient-text">{settings.heroTitleLine2 || 'dengan cara lama?'}</span>
+          <span className="hero-line hero-line-1">{settings.heroTitleLine1 || 'The Singularity'}</span>
+          <span className="hero-line hero-line-2 gradient-text">{settings.heroTitleLine2 || 'of Growth.'}</span>
         </h1>
         <p className="hero-question">
           {settings.heroQuestion ||
@@ -43,8 +43,8 @@ export default function Hero() {
           <button className="btn btn-primary" onClick={() => navigateTo('services')}>
             Temukan solusi Anda <b>↗</b>
           </button>
-          <button className="hero-text-link" onClick={() => navigateTo('about')}>
-            Kenali cara pikir SNG ↗
+          <button className="btn btn-hero-secondary" onClick={() => navigateTo('about')}>
+            Kenali cara pikir SNG <b>↗</b>
           </button>
         </div>
       </div>

@@ -6,6 +6,7 @@ import Philosophy from '../components/Philosophy';
 import Approach from '../components/Approach';
 import ServicesPreview from '../components/ServicesPreview';
 import Ecosystem from '../components/Ecosystem';
+import TeamSection from '../components/TeamSection';
 import ArticlesPreview from '../components/ArticlesPreview';
 import ClosingCTA from '../components/ClosingCTA';
 
@@ -19,6 +20,7 @@ export default function HomePage() {
       <Approach />
       <ServicesPreview />
       <Ecosystem />
+      <TeamSection />
       <ArticlesPreview />
       <ClosingCTA />
     </div>

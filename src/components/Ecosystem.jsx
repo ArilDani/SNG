@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import SplitText from './SplitText';
+import sngLogo from '../assets/sng-logo-clean.png';
 
 const NODES = [
   { id: 'n1', icon: '◎', label: 'Social Media', desc: 'Membangun jangkauan, interaksi komunitas, dan pengenalan brand melalui Instagram & TikTok.' },
@@ -55,8 +56,8 @@ export default function Ecosystem() {
 
         <div className="network reveal delay-1">
           <div className={`network-core ${activeNode ? 'core-pulsing' : ''}`}>
-            <div>
-              <strong>SNG</strong>
+            <div className="network-core-inner">
+              <img src={sngLogo} alt="SNG Agency" className="network-core-logo" />
               <small>THE NEXUS</small>
             </div>
           </div>

@@ -10,32 +10,40 @@ export default function Navbar() {
   const scrollTimeoutRef = useRef(null);
 
   useEffect(() => {
+    let ticking = false;
+
     const handleScroll = () => {
-      const currentScrollY = window.scrollY;
+      if (ticking) return;
+      ticking = true;
 
-      // Detect if user has scrolled down into sections
-      if (currentScrollY > 60) {
-        setScrolledPastTop(true);
-        // While actively scrolling, morph into the centered logo-only pill
-        setIsScrolling(true);
+      requestAnimationFrame(() => {
+        const currentScrollY = window.scrollY;
 
-        // Reset the scroll stop detection timer
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-        }
+        // Detect if user has scrolled down into sections
+        if (currentScrollY > 75) {
+          setScrolledPastTop(true);
+          // While actively scrolling, morph into the centered logo-only pill
+          setIsScrolling(true);
 
-        // When scrolling stops for 3 seconds (3000ms), morph back into full floating navigation bar
-        scrollTimeoutRef.current = setTimeout(() => {
+          // Reset the scroll stop detection timer
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current);
+          }
+
+          // When scrolling stops for 3 seconds (3000ms), morph back into full floating navigation bar
+          scrollTimeoutRef.current = setTimeout(() => {
+            setIsScrolling(false);
+          }, 3000);
+        } else if (currentScrollY <= 25) {
+          // At the very top: always full navigation
+          setScrolledPastTop(false);
           setIsScrolling(false);
-        }, 3000);
-      } else {
-        // At the very top: always full navigation
-        setScrolledPastTop(false);
-        setIsScrolling(false);
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current);
+          }
         }
-      }
+        ticking = false;
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -49,7 +57,7 @@ export default function Navbar() {
     if (user) {
       navigateTo(user.role === 'admin' ? 'admin-dashboard' : 'user-dashboard');
     } else {
-      setIsAuthModalOpen(true);
+      navigateTo('login');
     }
   };
 
